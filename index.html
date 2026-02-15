@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>¿Quién es Quién? - Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
+        
+        body { 
+            background-color: #334155; 
+            margin: 0; 
+            padding: 10px;
+            min-height: 100vh;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            align-items: center; 
+            justify-content: center;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            overflow-x: hidden;
+        }
+
+        .main-card {
+            background: #f1f5f9;
+            width: 100%;
+            max-width: 1100px;
+            border-radius: 24px;
+            padding: 20px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+        }
+
+        @media (min-width: 1024px) {
+            .grid-container {
+                grid-template-columns: repeat(10, 1fr);
+                gap: 14px;
+            }
+        }
+
+        .char-card {
+            position: relative;
+            background: #475569;
+            border-radius: 12px;
+            aspect-ratio: 1 / 1; 
+            touch-action: none;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .char-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            pointer-events: none;
+            -webkit-user-drag: none;
+        }
+
+        .x-mark {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(2px);
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .is-eliminated .x-mark { display: flex; }
+        .is-eliminated .char-img { filter: grayscale(1) brightness(0.4); }
+
+        #zoom-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(10px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none; 
+        }
+
+        #zoom-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        #zoom-box {
+            width: 85vw;
+            max-width: 450px;
+            aspect-ratio: 1/1;
+            background: white;
+            padding: 8px;
+            border-radius: 24px;
+            transform: scale(0.85);
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        #zoom-overlay.active #zoom-box { transform: scale(1); }
+
+        .btn-reset {
+            background: #ef4444;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-weight: 900;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="zoom-overlay">
+        <div id="zoom-box">
+            <img id="zoom-img" src="" class="w-full h-full object-cover rounded-2xl">
+        </div>
+    </div>
+
+    <div class="main-card">
+        <div class="flex flex-row justify-between items-center mb-6 px-1">
+            <h1 class="text-2xl md:text-5xl lg:text-6xl font-black italic text-blue-600 uppercase tracking-tighter">
+                ¿QUIÉN <span class="text-green-500 mx-1">ES</span> <span class="text-red-500">QUIÉN?</span>
+            </h1>
+            <button onclick="resetGame()" class="btn-reset">REINICIAR</button>
+        </div>
+        <div id="grid" class="grid-container"></div>
+    </div>
+
+    <script>
+        const grid = document.getElementById('grid');
+        const overlay = document.getElementById('zoom-overlay');
+        const zoomImg = document.getElementById('zoom-img');
+        let timer;
+        let zoomActivo = false;
+
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        for (let i = 1; i <= 50; i++) {
+            const card = document.createElement('div');
+            card.className = "char-card";
+            const imgSrc = `personajes/${i}.jpg`;
+            
+            card.innerHTML = `
+                <img src="${imgSrc}" class="char-img" draggable="false" onerror="this.style.opacity='0.3'">
+                <div class="x-mark">
+                    <svg viewBox="0 0 24 24" class="w-3/4 h-3/4 text-red-500" fill="none" stroke="currentColor" stroke-width="5">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </div>
+            `;
+
+            const showZoom = () => {
+                // DOBLE VERIFICACIÓN: No hacer nada si la carta está eliminada
+                if (card.classList.contains('is-eliminated')) return;
+
+                zoomActivo = true;
+                zoomImg.src = imgSrc;
+                overlay.classList.add('active');
+                if (navigator.vibrate) navigator.vibrate(50);
+            };
+
+            const hideZoom = () => {
+                clearTimeout(timer);
+                overlay.classList.remove('active');
+                setTimeout(() => { zoomActivo = false; }, 150);
+            };
+
+            // --- LÓGICA PC (0.65s) ---
+            card.addEventListener('mouseenter', () => {
+                zoomActivo = false;
+                // Solo inicia el timer si NO tiene la X
+                if (!card.classList.contains('is-eliminated')) {
+                    timer = setTimeout(showZoom, 650);
+                }
+            });
+            card.addEventListener('mouseleave', hideZoom);
+
+            // --- LÓGICA MÓVIL (0.4s) ---
+            card.addEventListener('touchstart', (e) => {
+                zoomActivo = false;
+                if (!card.classList.contains('is-eliminated')) {
+                    timer = setTimeout(showZoom, 400);
+                }
+            }, {passive: true});
+            
+            card.addEventListener('touchmove', () => clearTimeout(timer));
+            card.addEventListener('touchend', hideZoom);
+
+            // --- CLIC (LA X) ---
+            card.addEventListener('click', () => {
+                if (!zoomActivo) {
+                    card.classList.toggle('is-eliminated');
+                    // Si acabamos de poner la X, cancelamos cualquier zoom pendiente
+                    if (card.classList.contains('is-eliminated')) {
+                        clearTimeout(timer);
+                    }
+                }
+            });
+
+            grid.appendChild(card);
+        }
+
+        function resetGame() {
+            if(confirm('¿Reiniciar tablero?')) {
+                document.querySelectorAll('.char-card').forEach(card => card.classList.remove('is-eliminated'));
+            }
+        }
+    </script>
+</body>
+</html>
