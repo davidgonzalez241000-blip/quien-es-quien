@@ -8,6 +8,14 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
         
+        /* ELIMINAR PARPADEO Y RESALTADO EN MÓVIL */
+        * {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
         body { 
             background-color: #334155; 
             margin: 0; 
@@ -17,9 +25,6 @@
             display: flex;
             align-items: center; 
             justify-content: center;
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            user-select: none;
             overflow-x: hidden;
         }
 
@@ -60,7 +65,6 @@
             height: 100%;
             object-fit: cover;
             pointer-events: none;
-            -webkit-user-drag: none;
         }
 
         .x-mark {
@@ -88,7 +92,6 @@
             z-index: 9999;
             opacity: 0;
             transition: opacity 0.2s ease;
-            pointer-events: none; 
         }
 
         #zoom-overlay.active {
@@ -104,10 +107,16 @@
             padding: 8px;
             border-radius: 24px;
             transform: scale(0.85);
-            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
         }
 
         #zoom-overlay.active #zoom-box { transform: scale(1); }
+
+        .victory-glow {
+            box-shadow: 0 0 50px 20px rgba(234, 179, 8, 0.5);
+            border: 4px solid #eab308;
+        }
 
         .btn-reset {
             background: #ef4444;
@@ -122,8 +131,13 @@
 </head>
 <body>
 
-    <div id="zoom-overlay">
-        <div id="zoom-box">
+    <div id="zoom-overlay" onclick="hideZoom()">
+        <div id="zoom-box" onclick="event.stopPropagation()">
+            <div id="victory-label" class="hidden absolute -top-12 left-0 right-0 text-center">
+                <span class="bg-yellow-500 text-white px-6 py-2 rounded-full font-black text-xl tracking-widest animate-bounce inline-block">
+                    ¡TU PERSONAJE!
+                </span>
+            </div>
             <img id="zoom-img" src="" class="w-full h-full object-cover rounded-2xl">
         </div>
     </div>
@@ -142,10 +156,31 @@
         const grid = document.getElementById('grid');
         const overlay = document.getElementById('zoom-overlay');
         const zoomImg = document.getElementById('zoom-img');
+        const zoomBox = document.getElementById('zoom-box');
+        const victoryLabel = document.getElementById('victory-label');
         let timer;
         let zoomActivo = false;
+        let modoVictoria = false;
 
-        document.addEventListener('contextmenu', e => e.preventDefault());
+        // Bloqueo total de menús contextuales
+        window.oncontextmenu = function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            return false;
+        };
+
+        function hideZoom() {
+            clearTimeout(timer);
+            overlay.classList.remove('active');
+            setTimeout(() => { 
+                if (!overlay.classList.contains('active')) {
+                    zoomActivo = false;
+                    modoVictoria = false;
+                    victoryLabel.classList.add('hidden');
+                    zoomBox.classList.remove('victory-glow');
+                }
+            }, 200);
+        }
 
         for (let i = 1; i <= 50; i++) {
             const card = document.createElement('div');
@@ -153,7 +188,7 @@
             const imgSrc = `personajes/${i}.jpg`;
             
             card.innerHTML = `
-                <img src="${imgSrc}" class="char-img" draggable="false" onerror="this.style.opacity='0.3'">
+                <img src="${imgSrc}" class="char-img" draggable="false">
                 <div class="x-mark">
                     <svg viewBox="0 0 24 24" class="w-3/4 h-3/4 text-red-500" fill="none" stroke="currentColor" stroke-width="5">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -162,60 +197,80 @@
                 </div>
             `;
 
-            const showZoom = () => {
-                // DOBLE VERIFICACIÓN: No hacer nada si la carta está eliminada
-                if (card.classList.contains('is-eliminated')) return;
-
+            const showZoom = (isVictory = false) => {
+                if (!isVictory && card.classList.contains('is-eliminated')) return;
+                
                 zoomActivo = true;
                 zoomImg.src = imgSrc;
+                
+                if (isVictory) {
+                    modoVictoria = true;
+                    victoryLabel.classList.remove('hidden');
+                    zoomBox.classList.add('victory-glow');
+                }
+
                 overlay.classList.add('active');
-                if (navigator.vibrate) navigator.vibrate(50);
+                if (navigator.vibrate) navigator.vibrate(isVictory ? [100, 50, 100] : 40);
             };
 
-            const hideZoom = () => {
-                clearTimeout(timer);
-                overlay.classList.remove('active');
-                setTimeout(() => { zoomActivo = false; }, 150);
-            };
-
-            // --- LÓGICA PC (0.65s) ---
+            // PC
             card.addEventListener('mouseenter', () => {
-                zoomActivo = false;
-                // Solo inicia el timer si NO tiene la X
                 if (!card.classList.contains('is-eliminated')) {
                     timer = setTimeout(showZoom, 650);
                 }
             });
-            card.addEventListener('mouseleave', hideZoom);
+            card.addEventListener('mouseleave', () => { if(!modoVictoria) hideZoom(); });
 
-            // --- LÓGICA MÓVIL (0.4s) ---
+            // MÓVIL - MEJORADO PARA EVITAR PARPADEO
             card.addEventListener('touchstart', (e) => {
-                zoomActivo = false;
-                if (!card.classList.contains('is-eliminated')) {
-                    timer = setTimeout(showZoom, 400);
-                }
+                if (card.classList.contains('is-eliminated')) return;
+                
+                // Precarga la imagen inmediatamente al tocar
+                zoomImg.src = imgSrc; 
+                
+                timer = setTimeout(() => {
+                    showZoom();
+                }, 400);
             }, {passive: true});
-            
-            card.addEventListener('touchmove', () => clearTimeout(timer));
-            card.addEventListener('touchend', hideZoom);
 
-            // --- CLIC (LA X) ---
-            card.addEventListener('click', () => {
+            card.addEventListener('touchmove', () => clearTimeout(timer), {passive: true});
+            card.addEventListener('touchend', () => { if(!modoVictoria) hideZoom(); });
+
+            // CLIC (LA X)
+            card.addEventListener('click', (e) => {
                 if (!zoomActivo) {
                     card.classList.toggle('is-eliminated');
-                    // Si acabamos de poner la X, cancelamos cualquier zoom pendiente
-                    if (card.classList.contains('is-eliminated')) {
-                        clearTimeout(timer);
-                    }
+                    checkVictory();
                 }
             });
 
             grid.appendChild(card);
         }
 
+        function checkVictory() {
+            const allCards = document.querySelectorAll('.char-card');
+            const eliminated = document.querySelectorAll('.is-eliminated');
+            
+            if (eliminated.length === 49) {
+                const winner = Array.from(allCards).find(c => !c.classList.contains('is-eliminated'));
+                if (winner) {
+                    setTimeout(() => {
+                        const winnerImg = winner.querySelector('img').src;
+                        zoomImg.src = winnerImg;
+                        modoVictoria = true;
+                        victoryLabel.classList.remove('hidden');
+                        zoomBox.classList.add('victory-glow');
+                        overlay.classList.add('active');
+                        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                    }, 300);
+                }
+            }
+        }
+
         function resetGame() {
             if(confirm('¿Reiniciar tablero?')) {
                 document.querySelectorAll('.char-card').forEach(card => card.classList.remove('is-eliminated'));
+                hideZoom();
             }
         }
     </script>
